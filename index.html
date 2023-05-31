@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camino más corto</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+  <style>
+    #map {
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <button onclick="selectAlgorithm('backtracking')">Backtracking</button>
+  <button onclick="selectAlgorithm('greedy')">Glotón</button>
+  <button onclick="selectAlgorithm('bruteforce')">Fuerza Bruta</button>
+  <button onclick="selectAlgorithm('dynamic')">Con Memoria Dinámica</button>
+  <div id="map" style="display: none;"></div>
+  <div id="distance"></div>
+  <div id="duration"></div>
+
+  <script>
+    var startPoint;
+    var endPoint;
+    var distanceElement = document.getElementById('distance');
+    var durationElement = document.getElementById('duration');
+    var pathLayer;
+    var algorithm;
+
+    function selectAlgorithm(selectedAlgorithm) {
+      algorithm = selectedAlgorithm;
+      document.getElementsByTagName('button')[0].style.display = 'none';
+      document.getElementsByTagName('button')[1].style.display = 'none';
+      document.getElementsByTagName('button')[2].style.display = 'none';
+      document.getElementsByTagName('button')[3].style.display = 'none';
+      document.getElementById('map').style.display = 'block';
+      initializeMap();  
+    }
+
+    function initializeMap() {
+      var map = L.map('map').setView([-15.8402, -70.0219], 12);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      var control = L.Routing.control({
+        waypoints: [],
+        routeWhileDragging: true
+      }).addTo(map);
+
+      pathLayer = L.layerGroup().addTo(map);
+
+      map.on('click', function(e) {
+        if (!startPoint) {
+          startPoint = e.latlng;
+          L.marker(startPoint).addTo(map);
+          control.spliceWaypoints(0, 1, startPoint);
+        } else if (!endPoint) {
+          endPoint = e.latlng;
+          L.marker(endPoint).addTo(map);
+          control.spliceWaypoints(control.getWaypoints().length - 1, 1, endPoint);
+          calculateDistance();
+        }
+      });
+    }
+
+    function calculateDistance() {
+      var directionsService = L.Routing.osrmv1();
+
+      var request = {
+        waypoints: [
+          {latLng: startPoint},
+          {latLng: endPoint}
+        ],
+        alternatives: false
+      };
+
+      directionsService.route(request, function(error, result) {
+        if (!error) {
+          var distance = result.routes[0].summary.totalDistance;
+          var duration = result.routes[0].summary.totalTime;
+
+          // Actualizar los elementos de texto con la distancia y la duración
+          distanceElement.textContent = "Distancia: " + distance + " metros";
+          durationElement.textContent = "Duración: " + duration + " segundos";
+
+          // Borrar los caminos anteriores antes de mostrar los nuevos
+          pathLayer.clearLayers();
+
+          // Mostrar el camino calculado según el algoritmo seleccionado
+          if (algorithm === 'backtracking') {
+            var backtrackingPath = findShortestPath(result.routes[0]);
+            L.polyline(backtrackingPath, { color: 'red' }).addTo(pathLayer);
+          } else if (algorithm === 'greedy') {
+            var greedyPath = goloso(result.routes[0]);
+            L.polyline(greedyPath, { color: 'blue' }).addTo(pathLayer);
+          } else if (algorithm === 'bruteforce') {
+            var bruteforcePath = fuerzaBruta(result.routes[0]);
+            L.polyline(bruteforcePath, { color: 'green' }).addTo(pathLayer);
+          } else if (algorithm === 'dynamic') {
+            var dynamicPath = memoriaDinamica(result.routes[0]);
+            L.polyline(dynamicPath, { color: 'purple' }).addTo(pathLayer);
+          }
+        } else {
+          console.error("No se pudo encontrar el camino más corto.");
+        }
+      });
+    }
+  function findShortestPath(route) {
+  var coordinates = route.coordinates;
+  var path = [];
+  backtrack(0, path);
+
+  function backtrack(index, currentPath) {
+    if (index === coordinates.length) {
+      // Llegamos al final del recorrido, almacenamos el camino actual
+      path.push(currentPath.slice());
+    } else {
+      var coordinate = coordinates[index];
+      currentPath.push(coordinate);
+      backtrack(index + 1, currentPath);
+      currentPath.pop();
+    }
+  }
+
+  return path;
+}
+
+function goloso(route) {
+  var coordinates = route.coordinates;
+  var path = [];
+  var visited = new Array(coordinates.length).fill(false);
+  var currentCoordinate = coordinates[0];
+  path.push(currentCoordinate);
+
+  while (path.length < coordinates.length) {
+    var shortestDistance = Infinity;
+    var shortestIndex = -1;
+
+    for (var i = 0; i < coordinates.length; i++) {
+      if (!visited[i]) {
+        var distance = getDistance(currentCoordinate, coordinates[i]);
+        if (distance < shortestDistance) {
+          shortestDistance = distance;
+          shortestIndex = i;
+        }
+      }
+    }
+
+    visited[shortestIndex] = true;
+    currentCoordinate = coordinates[shortestIndex];
+    path.push(currentCoordinate);
+  }
+
+  return path;
+}
+
+function fuerzaBruta(route) {
+  var coordinates = route.coordinates;
+  var permutation = [];
+  var minDistance = Infinity;
+  var minPath = [];
+
+  generatePermutations(coordinates);
+
+  function generatePermutations(arr) {
+    if (arr.length === 0) {
+      var distance = calculateDistance(arr);
+      if (distance < minDistance) {
+        minDistance = distance;
+        minPath = arr.slice();
+      }
+    } else {
+      for (var i = 0; i < arr.length; i++) {
+        var rest = arr.slice();
+        var current = rest.splice(i, 1);
+        permutation.push(current[0]);
+        generatePermutations(rest);
+        permutation.pop();
+      }
+    }
+  }
+
+  function calculateDistance(path) {
+    var distance = 0;
+    for (var i = 0; i < path.length - 1; i++) {
+      distance += getDistance(path[i], path[i + 1]);
+    }
+    return distance;
+  }
+
+  return minPath;
+}
+
+function memoriaDinamica(route) {
+  var coordinates = route.coordinates;
+  var memo = {};
+  var path = [];
+  var distance = dynamicProgramming(0, 1);
+
+  function dynamicProgramming(currentIndex, bitmask) {
+    if (bitmask === (1 << coordinates.length) - 1) {
+      return getDistance(coordinates[currentIndex], coordinates[0]);
+    }
+
+    var key = currentIndex + "-" + bitmask;
+    if (memo.hasOwnProperty(key)) {
+      return memo[key];
+    }
+
+    var minDistance = Infinity;
+    for (var nextIndex = 0; nextIndex < coordinates.length; nextIndex++) {
+      if ((bitmask & (1 << nextIndex)) === 0) {
+        var newBitmask = bitmask | (1 << nextIndex);
+        var newDistance =
+          getDistance(coordinates[currentIndex], coordinates[nextIndex]) +
+          dynamicProgramming(nextIndex, newBitmask);
+
+        if (newDistance < minDistance) {
+          minDistance = newDistance;
+          path[currentIndex] = coordinates[nextIndex];
+        }
+      }
+    }
+
+    memo[key] = minDistance;
+    return minDistance;
+  }
+
+  // Reconstruir el camino
+  var current = 0;
+  var newPath = [coordinates[current]];
+  while (path[current]) {
+    newPath.push(path[current]);
+    current = coordinates.indexOf(path[current]);
+  }
+
+  return newPath;
+}
+
+  </script>
+</body>
+</html>
